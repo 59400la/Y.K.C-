@@ -241,7 +241,6 @@ canvas#outCanvas { display:none; }
 <div class="filter-row">
   <button class="fbtn" id="f-bw" onclick="setFilter('bw')">B&W</button>
   <button class="fbtn on" id="f-color" onclick="setFilter('color')">COLOR</button>
-  <button class="fbtn" id="f-y2k" onclick="setFilter('y2k')">Y2K</button>
 </div>
 
 <div class="vf-wrap">
@@ -600,10 +599,11 @@ async function startSession() {
     }
   }
 
+  // Keep cell3 frame visible for 2s before hiding
+  await delay(2000);
   statusTxt.textContent = 'printing...';
-  // Hide frame overlay when done shooting
   const fo3 = document.getElementById('frameOverlay');
-  if (fo3) fo3.style.opacity = '0';
+  if (fo3) { fo3.style.opacity = '0'; }
   await delay(300);
   stripStage.classList.add('ejecting');
   await delay(100);
