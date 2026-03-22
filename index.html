@@ -91,9 +91,9 @@ background: linear-gradient(135deg,rgba(255,180,220,0.2),rgba(210,170,255,0.18))
 mix-blend-mode: screen;
 }
 .cd-overlay {
-position: absolute; inset: 0;
+position: absolute; inset: 0; z-index: 30; /* above video wrapper z-index:1 */
 display: flex; align-items: center; justify-content: center;
-background: rgba(0,0,0,0.5); opacity: 0; pointer-events: none; transition: opacity 0.2s;
+background: rgba(0,0,0,0.55); opacity: 0; pointer-events: none; transition: opacity 0.2s;
 }
 .cd-overlay.show { opacity: 1; }
 .cd-num {
@@ -102,7 +102,7 @@ text-shadow: 0 0 40px rgba(220,160,255,0.9);
 animation: cdPop 0.55s cubic-bezier(0.34,1.56,0.64,1);
 }
 @keyframes cdPop { from{transform:scale(3);opacity:0} to{transform:scale(1);opacity:1} }
-.shot-overlay { position:absolute; inset:0; background:white; opacity:0; pointer-events:none; }
+.shot-overlay { position:absolute; inset:0; z-index:30; background:white; opacity:0; pointer-events:none; }
 
 .filter-row { display:flex; gap:6px; width:100%; }
 .fbtn {
@@ -246,12 +246,17 @@ canvas#outCanvas { display:none; }
 
 <div class="vf-wrap">
   <div class="viewfinder">
-    <!-- pointer-events:none on wrapper kills iOS play/pause tap overlay -->
-    <div style="position:absolute;inset:0;z-index:1;pointer-events:none;overflow:hidden;">
+    <!-- video layer -->
+    <div style="position:absolute;inset:0;z-index:1;overflow:hidden;">
       <video id="vid" autoplay muted playsinline webkit-playsinline
         x-webkit-airplay="deny" disablepictureinpicture
         style="width:100%;height:100%;object-fit:cover;display:block;transform:scaleX(-1);"></video>
     </div>
+    <!-- transparent tap-catcher: intercepts iOS play/pause, sits above video but below countdown -->
+    <div style="position:absolute;inset:0;z-index:2;background:transparent;"
+         onclick="event.preventDefault();event.stopPropagation();"
+         ontouchstart="event.preventDefault();"
+         ontouchend="event.preventDefault();"></div>
     <div class="vf-filter" id="vfFilter"></div>
     <div class="cd-overlay" id="cdOverlay"><span class="cd-num" id="cdNum">3</span></div>
     <div class="shot-overlay" id="shotOverlay"></div>
@@ -539,7 +544,7 @@ async function startSession() {
     await captureShot(i);
     document.getElementById('pd'+i).classList.remove('active');
     document.getElementById('pd'+i).classList.add('done');
-    if (i < 3) await delay(600);
+    if (i < 3) await delay(1500);
   }
 
   statusTxt.textContent = 'printing...';
