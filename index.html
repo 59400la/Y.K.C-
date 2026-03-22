@@ -246,17 +246,15 @@ canvas#outCanvas { display:none; }
 
 <div class="vf-wrap">
   <div class="viewfinder">
-    <!-- video: pointer-events:none prevents ALL iOS media overlay controls -->
-    <div style="position:absolute;inset:0;z-index:1;overflow:hidden;">
-      <video id="vid" autoplay muted playsinline webkit-playsinline
-        x-webkit-airplay="deny" disablepictureinpicture
-        style="width:100%;height:100%;object-fit:cover;display:block;transform:scaleX(-1);pointer-events:none;-webkit-user-select:none;"></video>
-    </div>
+    <!-- Hidden video source (never visible, no system UI) -->
+    <video id="vid" autoplay muted playsinline webkit-playsinline
+      x-webkit-airplay="deny" disablepictureinpicture
+      style="display:none;"></video>
+    <!-- Canvas mirror of video — shows frames without any system overlay -->
+    <canvas id="vidCanvas" style="position:absolute;inset:0;z-index:1;width:100%;height:100%;object-fit:cover;display:block;"></canvas>
+    <!-- Frame overlay: shows cell0 frame on top of live preview -->
+    <img id="frameOverlay" style="position:absolute;inset:0;z-index:2;width:100%;height:100%;object-fit:cover;pointer-events:none;" src="" alt="">
     <div class="vf-filter" id="vfFilter"></div>
-    <!-- Shot preview: shows last captured frame briefly -->
-    <img id="shotPreview" style="position:absolute;inset:0;z-index:10;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity 0.15s;" src="" alt="">
-    <!-- Shot counter badge -->
-    <div id="shotBadge" style="position:absolute;bottom:8px;right:8px;z-index:15;font-family:'VT323',monospace;font-size:1.1rem;color:rgba(255,255,255,0.7);letter-spacing:2px;display:none;background:rgba(0,0,0,0.4);padding:2px 6px;border-radius:4px;"></div>
     <div class="cd-overlay" id="cdOverlay"><span class="cd-num" id="cdNum">3</span></div>
     <div class="shot-overlay" id="shotOverlay"></div>
   </div>
@@ -413,6 +411,31 @@ function pixelFilter(srcCanvas, CW, CH) {
   return out.toDataURL('image/jpeg', 0.93);
 }
 
+let canvasAnimFrame = null;
+
+function startCanvasMirror() {
+  const canvas = document.getElementById('vidCanvas');
+  if (!canvas) return;
+  const cctx = canvas.getContext('2d');
+  function drawFrame() {
+    if (vid.readyState >= 2) {
+      if (canvas.width !== vid.videoWidth || canvas.height !== vid.videoHeight) {
+        canvas.width  = vid.videoWidth  || 640;
+        canvas.height = vid.videoHeight || 480;
+      }
+      cctx.save();
+      if (facingMode === 'user') { cctx.translate(canvas.width,0); cctx.scale(-1,1); }
+      cctx.filter = CSS_FILTER[currentFilter];
+      cctx.drawImage(vid, 0, 0, canvas.width, canvas.height);
+      cctx.filter = 'none';
+      cctx.restore();
+    }
+    canvasAnimFrame = requestAnimationFrame(drawFrame);
+  }
+  if (canvasAnimFrame) cancelAnimationFrame(canvasAnimFrame);
+  drawFrame();
+}
+
 async function startCam() {
   try {
     if (stream) stream.getTracks().forEach(t => t.stop());
@@ -423,6 +446,14 @@ async function startCam() {
     vid.setAttribute('playsinline','');
     vid.setAttribute('webkit-playsinline','');
     vid.play().catch(()=>{});
+    vid.onloadedmetadata = () => startCanvasMirror();
+    setTimeout(startCanvasMirror, 500); // fallback
+    // Show frame overlay on viewfinder
+    const fo = document.getElementById('frameOverlay');
+    if (fo) {
+      fo.src = document.getElementById('stripFrame').src;
+      fo.style.opacity = '0.3';
+    }
     applyFilter();
   } catch(e) {
     // Camera permission denied or not available (e.g. local file / no HTTPS)
@@ -442,8 +473,6 @@ async function startCam() {
 
 function applyFilter() {
   // Live viewfinder: CSS filter on video element
-  vid.style.filter = CSS_FILTER[currentFilter];
-  vid.style.transform = (facingMode==='user') ? 'scaleX(-1)' : 'scaleX(1)';
   vfFilter.className = 'vf-filter' + (currentFilter==='y2k' ? ' y2k' : '');
 
   // Apply same filter to entire strip (photos + frame together)
@@ -609,24 +638,19 @@ async function captureShot(idx) {
   if (vAR > dAR) { sh=vH; sw=sh*dAR; sx=(vW-sw)/2; sy=0; }
   else           { sw=vW; sh=sw/dAR; sx=0; sy=(vH-sh)/2; }
 
-  if (facingMode==='user') { ctx.translate(CW,0); ctx.scale(-1,1); }
-  ctx.drawImage(vid, sx,sy,sw,sh, 0,0,CW,CH);
+  // Capture from canvas mirror (not hidden video) — no transform needed, canvas already mirrored
+  const vcv = document.getElementById('vidCanvas');
+  const srcEl = (vcv && vcv.width > 0) ? vcv : vid;
+  const srcW = srcEl.width || srcEl.videoWidth || 640;
+  const srcH = srcEl.height || srcEl.videoHeight || 480;
+  const srcAR2 = srcW / srcH;
+  const dstAR2 = CW / CH;
+  let sx2,sy2,sw2,sh2;
+  if(srcAR2>dstAR2){sh2=srcH;sw2=sh2*dstAR2;sx2=(srcW-sw2)/2;sy2=0;}
+  else             {sw2=srcW;sh2=sw2/dstAR2;sx2=0;sy2=(srcH-sh2)/2;}
+  ctx.drawImage(srcEl, sx2,sy2,sw2,sh2, 0,0,CW,CH);
   ctx.setTransform(1,0,0,1,0,0);
   captured[idx] = pixelFilter(c, CW, CH);
-
-  // Show captured frame in viewfinder preview
-  const preview = document.getElementById('shotPreview');
-  const badge   = document.getElementById('shotBadge');
-  if (preview) {
-    preview.src = captured[idx];
-    preview.style.opacity = '1';
-    if (badge) { badge.textContent = (idx+1)+' / 4'; badge.style.display='block'; }
-    // Fade out after 1s to show live video again for next shot
-    setTimeout(() => {
-      preview.style.opacity = '0';
-      if (idx === 3 && badge) badge.style.display = 'none';
-    }, 1000);
-  }
 }
 
 // ── Retake: reset everything, restart camera ──
@@ -641,10 +665,7 @@ function retake() {
   saveRow.style.display = 'none';
   shootBtn.disabled = false;
   statusTxt.textContent = 'ready';
-  const preview = document.getElementById('shotPreview');
-  if (preview) { preview.src=''; preview.style.opacity='0'; }
-  const badge = document.getElementById('shotBadge');
-  if (badge) badge.style.display = 'none';
+  // Restart camera so viewfinder is live again
   startCam();
 }
 
