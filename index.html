@@ -253,7 +253,7 @@ canvas#outCanvas { display:none; }
     <!-- Canvas mirror of video — shows frames without any system overlay -->
     <canvas id="vidCanvas" style="position:absolute;inset:0;z-index:1;width:100%;height:100%;object-fit:cover;display:block;"></canvas>
     <!-- Frame overlay: shows cell0 frame on top of live preview -->
-    <img id="frameOverlay" style="position:absolute;inset:0;z-index:2;width:100%;height:100%;object-fit:fill;pointer-events:none;transition:opacity 0.2s;" src="" alt="">
+    <img id="frameOverlay" style="position:absolute;inset:0;z-index:2;width:100%;height:100%;object-fit:fill;pointer-events:none;transition:opacity 0.3s ease;" src="" alt="">
     <div class="vf-filter" id="vfFilter"></div>
     <div class="cd-overlay" id="cdOverlay"><span class="cd-num" id="cdNum">3</span></div>
     <div class="shot-overlay" id="shotOverlay"></div>
@@ -570,19 +570,34 @@ async function startSession() {
     document.getElementById('pd'+i).className = 'pd';
   }
 
+  // Show cell0 frame, then countdown
+  const fo2 = document.getElementById('frameOverlay');
+  if (fo2) { fo2.src = CELL_FRAMES[0]; fo2.style.opacity = '1'; }
+  await delay(600); // let user see cell0 frame before countdown
+
   statusTxt.textContent = 'get ready!';
   await countdown321();
 
   for (let i=0; i<4; i++) {
     document.getElementById('pd'+i).classList.add('active');
     statusTxt.textContent = 'shot '+(i+1)+' of 4';
-    // Switch frame overlay to current cell
-    const fo2 = document.getElementById('frameOverlay');
-    if (fo2) { fo2.src = CELL_FRAMES[i]; fo2.style.opacity = '1'; }
+
+    // Frame already showing for this cell — shoot
     await captureShot(i);
     document.getElementById('pd'+i).classList.remove('active');
     document.getElementById('pd'+i).classList.add('done');
-    if (i < 3) await delay(1500);
+
+    if (i < 3) {
+      // Show captured result briefly, then switch to next cell frame
+      await delay(1800);           // pause so user sees the flash result
+      if (fo2) {
+        fo2.style.opacity = '0';   // brief fade out
+        await delay(300);
+        fo2.src = CELL_FRAMES[i+1]; // load next cell
+        fo2.style.opacity = '1';   // fade in next frame
+      }
+      await delay(1200);           // give user time to reposition
+    }
   }
 
   statusTxt.textContent = 'printing...';
