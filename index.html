@@ -246,7 +246,12 @@ canvas#outCanvas { display:none; }
 
 <div class="vf-wrap">
   <div class="viewfinder">
-    <video id="vid" autoplay muted playsinline webkit-playsinline x-webkit-airplay="deny" disablepictureinpicture></video>
+    <!-- pointer-events:none on wrapper kills iOS play/pause tap overlay -->
+    <div style="position:absolute;inset:0;z-index:1;pointer-events:none;overflow:hidden;">
+      <video id="vid" autoplay muted playsinline webkit-playsinline
+        x-webkit-airplay="deny" disablepictureinpicture
+        style="width:100%;height:100%;object-fit:cover;display:block;transform:scaleX(-1);"></video>
+    </div>
     <div class="vf-filter" id="vfFilter"></div>
     <div class="cd-overlay" id="cdOverlay"><span class="cd-num" id="cdNum">3</span></div>
     <div class="shot-overlay" id="shotOverlay"></div>
@@ -273,7 +278,7 @@ canvas#outCanvas { display:none; }
 
   <div class="strip-stage-outer" id="stripStage">
     <div class="film-strip-outer" id="stripOuter">
-      <div class="film-strip">
+      <div class="film-strip" id="filmStrip">
         <div class="photos-layer">
           <div class="photo-cell" id="cell0"><span class="enum">01</span></div>
           <div class="photo-cell" id="cell1"><span class="enum">02</span></div>
@@ -432,9 +437,31 @@ async function startCam() {
 }
 
 function applyFilter() {
+  // Live viewfinder: CSS filter on video element
   vid.style.filter = CSS_FILTER[currentFilter];
-  vfFilter.className = 'vf-filter' + (currentFilter==='y2k' ? ' y2k' : '');
   vid.style.transform = (facingMode==='user') ? 'scaleX(-1)' : 'scaleX(1)';
+  vfFilter.className = 'vf-filter' + (currentFilter==='y2k' ? ' y2k' : '');
+
+  // Apply same filter to entire strip (photos + frame together)
+  const strip = document.getElementById('filmStrip');
+  if (strip) {
+    strip.style.filter = CSS_FILTER[currentFilter];
+    // Y2K: extra pink bloom overlay on strip
+    let ov = strip.querySelector('.strip-tint');
+    if (currentFilter === 'y2k') {
+      if (!ov) {
+        ov = document.createElement('div');
+        ov.className = 'strip-tint';
+        ov.style.cssText = 'position:absolute;inset:0;z-index:20;pointer-events:none;' +
+          'background:linear-gradient(135deg,rgba(255,180,220,0.18),rgba(210,170,255,0.15));' +
+          'mix-blend-mode:screen;';
+        strip.style.position = 'relative';
+        strip.appendChild(ov);
+      }
+    } else {
+      if (ov) ov.remove();
+    }
+  }
 }
 function setFilter(f) {
   currentFilter = f;
@@ -521,6 +548,7 @@ async function startSession() {
   await delay(100);
   stripOuter.classList.add('ejected');
   await delay(2300);
+  applyFilter(); // ensure filter is applied to revealed strip
 
   for (let i=0; i<4; i++) {
     const cell = document.getElementById('cell'+i);
