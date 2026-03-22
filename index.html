@@ -246,18 +246,17 @@ canvas#outCanvas { display:none; }
 
 <div class="vf-wrap">
   <div class="viewfinder">
-    <!-- video layer -->
+    <!-- video: pointer-events:none prevents ALL iOS media overlay controls -->
     <div style="position:absolute;inset:0;z-index:1;overflow:hidden;">
       <video id="vid" autoplay muted playsinline webkit-playsinline
         x-webkit-airplay="deny" disablepictureinpicture
-        style="width:100%;height:100%;object-fit:cover;display:block;transform:scaleX(-1);"></video>
+        style="width:100%;height:100%;object-fit:cover;display:block;transform:scaleX(-1);pointer-events:none;-webkit-user-select:none;"></video>
     </div>
-    <!-- transparent tap-catcher: intercepts iOS play/pause, sits above video but below countdown -->
-    <div style="position:absolute;inset:0;z-index:2;background:transparent;"
-         onclick="event.preventDefault();event.stopPropagation();"
-         ontouchstart="event.preventDefault();"
-         ontouchend="event.preventDefault();"></div>
     <div class="vf-filter" id="vfFilter"></div>
+    <!-- Shot preview: shows last captured frame briefly -->
+    <img id="shotPreview" style="position:absolute;inset:0;z-index:10;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity 0.15s;" src="" alt="">
+    <!-- Shot counter badge -->
+    <div id="shotBadge" style="position:absolute;bottom:8px;right:8px;z-index:15;font-family:'VT323',monospace;font-size:1.1rem;color:rgba(255,255,255,0.7);letter-spacing:2px;display:none;background:rgba(0,0,0,0.4);padding:2px 6px;border-radius:4px;"></div>
     <div class="cd-overlay" id="cdOverlay"><span class="cd-num" id="cdNum">3</span></div>
     <div class="shot-overlay" id="shotOverlay"></div>
   </div>
@@ -614,6 +613,20 @@ async function captureShot(idx) {
   ctx.drawImage(vid, sx,sy,sw,sh, 0,0,CW,CH);
   ctx.setTransform(1,0,0,1,0,0);
   captured[idx] = pixelFilter(c, CW, CH);
+
+  // Show captured frame in viewfinder preview
+  const preview = document.getElementById('shotPreview');
+  const badge   = document.getElementById('shotBadge');
+  if (preview) {
+    preview.src = captured[idx];
+    preview.style.opacity = '1';
+    if (badge) { badge.textContent = (idx+1)+' / 4'; badge.style.display='block'; }
+    // Fade out after 1s to show live video again for next shot
+    setTimeout(() => {
+      preview.style.opacity = '0';
+      if (idx === 3 && badge) badge.style.display = 'none';
+    }, 1000);
+  }
 }
 
 // ── Retake: reset everything, restart camera ──
@@ -628,7 +641,10 @@ function retake() {
   saveRow.style.display = 'none';
   shootBtn.disabled = false;
   statusTxt.textContent = 'ready';
-  // Restart camera so viewfinder is live again
+  const preview = document.getElementById('shotPreview');
+  if (preview) { preview.src=''; preview.style.opacity='0'; }
+  const badge = document.getElementById('shotBadge');
+  if (badge) badge.style.display = 'none';
   startCam();
 }
 
