@@ -230,7 +230,7 @@ canvas#outCanvas { display:none; }
 
   <div class="machine-body">
     <div class="machine-detail">
-      <span class="machine-label">MODEL CR-01</span>
+      <span class="machine-label">YOKOCHI RYO</span>
       <div class="machine-dots">
         <div class="mdot"></div><div class="mdot green"></div><div class="mdot"></div>
       </div>
@@ -536,15 +536,48 @@ function handleUpload(e) {
       img.onerror = rej;
       img.src = src;
     })));
-  }).then(srcs => {
+  }).then(async srcs => {
     uploads = [...srcs];
     while (uploads.length < 4) uploads.push(srcs[srcs.length-1]);
     useUpload = true;
-    shootBtn.disabled = false;
-    statusTxt.textContent = files.length + ' photos ready!';
-    // Auto-start if 4 photos selected
+
     if (files.length >= 4) {
-      startSession();
+      // 4 photos selected: skip shoot, generate strip directly
+      statusTxt.textContent = 'generating...';
+      shootBtn.disabled = true;
+      saveRow.style.display = 'none';
+      stripOuter.classList.remove('ejected');
+      stripStage.classList.remove('ejecting');
+      for (let i=0;i<4;i++){
+        document.getElementById('cell'+i).innerHTML='<span class="enum">0'+(i+1)+'</span>';
+        document.getElementById('pd'+i).className='pd done';
+      }
+      captured = [];
+      for (let i=0;i<4;i++){
+        captured[i] = await applyFilterToImage(uploads[i], CELLS_PX[i]);
+      }
+      statusTxt.textContent = 'printing...';
+      await delay(300);
+      stripStage.classList.add('ejecting');
+      await delay(100);
+      stripOuter.classList.add('ejected');
+      await delay(2300);
+      applyFilter();
+      for (let i=0;i<4;i++){
+        const cell=document.getElementById('cell'+i);
+        cell.innerHTML='';
+        const img=document.createElement('img');
+        img.src=captured[i];
+        cell.appendChild(img);
+        await delay(30); img.classList.add('visible');
+        await delay(350);
+      }
+      statusTxt.textContent = 'done ✓';
+      saveRow.style.display = 'flex';
+      shootBtn.disabled = false;
+    } else {
+      shootBtn.disabled = false;
+      statusTxt.textContent = files.length + ' photos — press shoot';
     }
   }).catch(() => {
     statusTxt.textContent = 'upload failed';
@@ -717,11 +750,38 @@ async function saveStrip() {
   }
   ctx.drawImage(stripFrame, 0,0,FW,FH);
 
-  const a = document.createElement('a');
-  a.download = 'coldrain-strip.png';
-  a.href = outCanvas.toDataURL('image/png');
-  a.click();
-  statusTxt.textContent = 'saved ✓';
+  statusTxt.textContent = 'saving...';
+  outCanvas.toBlob(async (blob) => {
+    try {
+      const file = new File([blob], 'coldrain-strip.png', { type: 'image/png' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        // iOS: share sheet → Save Image saves to Photos
+        await navigator.share({ files: [file], title: 'coldrain photobooth' });
+        statusTxt.textContent = 'saved ✓';
+      } else {
+        // Desktop fallback: download
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.download = 'coldrain-strip.png';
+        a.href = url;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        statusTxt.textContent = 'saved ✓';
+      }
+    } catch(e) {
+      if (e.name !== 'AbortError') {
+        // Share failed, try download
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.download = 'coldrain-strip.png';
+        a.href = url;
+        a.click();
+        statusTxt.textContent = 'saved ✓';
+      } else {
+        statusTxt.textContent = 'cancelled';
+      }
+    }
+  }, 'image/png');
 }
 
 function loadImg(src) {
