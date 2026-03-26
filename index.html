@@ -327,6 +327,7 @@ let stream = null, facingMode = 'user', currentFilter = 'color';
 let captured = [], shooting = false;
 let uploads = [];
 let useUpload = false;
+let lastSource = 'camera'; // 'camera' or 'upload'
 
 const CELLS_PX = [
   {x:35, y:22,   w:526, h:329},
@@ -572,6 +573,7 @@ function handleUpload(e) {
         await delay(30); img.classList.add('visible');
         await delay(350);
       }
+      lastSource = 'upload';
       statusTxt.textContent = 'done ✓';
       saveRow.style.display = 'flex';
       shootBtn.disabled = false;
@@ -591,6 +593,8 @@ function handleUpload(e) {
 async function startSession() {
   if (shooting) return;
   shooting = true; captured = [];
+  uploads = []; useUpload = false;  // SHOOT = camera mode, clear any uploads
+  lastSource = 'camera';
   shootBtn.disabled = true;
   saveRow.style.display = 'none';
 
@@ -716,7 +720,7 @@ async function captureShot(idx) {
 
 // ── Retake: reset everything, restart camera ──
 function retake() {
-  captured = []; uploads = []; useUpload = false;
+  captured = [];
   stripOuter.classList.remove('ejected');
   stripStage.classList.remove('ejecting');
   for (let i=0; i<4; i++) {
@@ -725,9 +729,23 @@ function retake() {
   }
   saveRow.style.display = 'none';
   shootBtn.disabled = false;
-  statusTxt.textContent = 'ready';
-  // Restart camera so viewfinder is live again
-  startCam();
+
+  if (lastSource === 'upload') {
+    // 重新上傳：清空 upload 狀態，提示用戶重選
+    uploads = []; useUpload = false;
+    statusTxt.textContent = 'upload new photos';
+    const fo = document.getElementById('frameOverlay');
+    if (fo) { fo.src = CELL_FRAMES[0]; fo.style.opacity = '1'; }
+    // Trigger file picker
+    document.getElementById('fileInput').click();
+  } else {
+    // 重新拍照：回到相機模式
+    uploads = []; useUpload = false;
+    statusTxt.textContent = 'ready';
+    const fo = document.getElementById('frameOverlay');
+    if (fo) { fo.src = CELL_FRAMES[0]; fo.style.opacity = '1'; }
+    startCam();
+  }
 }
 
 async function saveStrip() {
