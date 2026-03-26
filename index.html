@@ -760,11 +760,9 @@ async function saveStrip() {
   for (let i=0; i<4; i++) {
     const {x,y,w,h} = CELLS_PX[i];
     const el = await loadImg(imgs[i]);
-    const sAR = el.naturalWidth/el.naturalHeight, dAR = w/h;
-    let sx,sy,sw,sh;
-    if (sAR>dAR) { sh=el.naturalHeight; sw=sh*dAR; sx=(el.naturalWidth-sw)/2; sy=0; }
-    else         { sw=el.naturalWidth; sh=sw/dAR; sx=0; sy=(el.naturalHeight-sh)/2; }
-    ctx.drawImage(el, sx,sy,sw,sh, x,y,w,h);
+    // captured[] images are already filtered & cropped at 2x resolution
+    // Just draw them directly into the cell — no re-crop needed
+    ctx.drawImage(el, 0, 0, el.naturalWidth, el.naturalHeight, x, y, w, h);
   }
   ctx.drawImage(stripFrame, 0,0,FW,FH);
 
